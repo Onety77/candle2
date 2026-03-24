@@ -792,23 +792,44 @@ const EMPTY_FORM = {
 // ─── LOGIN SCREEN ──────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin }) {
   const { t } = useTheme();
-  const [selectedUser, setSelectedUser] = useState(null);
+  // Default is always user77. The user field is a hidden edit — triple-tap the
+  // avatar to open a discreet user switcher.
+  const [activeUser, setActiveUser] = useState("user77");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const [avatarTaps, setAvatarTaps] = useState(0);
+  const [showSwitcher, setShowSwitcher] = useState(false);
+
+  // Keyboard support
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Backspace") { handleKey("del"); return; }
+      if (/^[0-9]$/.test(e.key)) { handleKey(e.key); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   const handleKey = (k) => {
     if (k === "del") { setPin(p => p.slice(0, -1)); setError(""); return; }
-    if (pin.length >= 6) return;
+    const user = USERS.find(u => u.name === activeUser);
+    if (pin.length >= user.pin.length) return;
     const next = pin + k;
     setPin(next);
-    if (selectedUser) {
-      if (next.length === USERS.find(u => u.name === selectedUser).pin.length) {
-        const user = USERS.find(u => u.name === selectedUser);
-        if (next === user.pin) { onLogin(user.name); }
-        else { setError("Wrong PIN"); setPin(""); }
-      }
+    if (next.length === user.pin.length) {
+      if (next === user.pin) { onLogin(user.name); }
+      else { setError("Wrong PIN"); setTimeout(() => setPin(""), 400); setTimeout(() => setError(""), 1200); }
     }
   };
+
+  const handleAvatarTap = () => {
+    const next = avatarTaps + 1;
+    setAvatarTaps(next);
+    if (next >= 3) { setShowSwitcher(true); setAvatarTaps(0); }
+    setTimeout(() => setAvatarTaps(0), 1000);
+  };
+
+  const currentUser = USERS.find(u => u.name === activeUser);
 
   return (
     <div style={{
@@ -820,93 +841,100 @@ function LoginScreen({ onLogin }) {
       padding: "24px",
       background: t.bg,
     }}>
-      <div style={{ width: "100%", maxWidth: 340 }}>
-        <div style={{ textAlign: "center", marginBottom: 36 }}>
-          <div style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 52, height: 52,
-            borderRadius: 14,
-            background: t.accentSoft,
-            border: `1.5px solid ${t.accent}`,
-            marginBottom: 16,
-          }}>
+      <div style={{ width: "100%", maxWidth: 320 }}>
+        {/* Logo */}
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div
+            onClick={handleAvatarTap}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 56, height: 56,
+              borderRadius: 16,
+              background: t.accentSoft,
+              border: `1.5px solid ${t.accent}`,
+              marginBottom: 18,
+              cursor: "default",
+              userSelect: "none",
+              WebkitTapHighlightColor: "transparent",
+            }}>
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
             </svg>
           </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: t.text }}>Backtest Journal</div>
-          <div style={{ fontSize: 13, color: t.text3, marginTop: 4 }}>ERL / IRL Strategy Tracker</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: t.text, letterSpacing: "-0.3px" }}>Backtest Journal</div>
+          <div style={{ fontSize: 13, color: t.text3, marginTop: 5 }}>ERL / IRL Strategy Tracker</div>
         </div>
 
-        {!selectedUser ? (
-          <div>
-            <div className="section-heading">Select User</div>
+        {/* PIN dots */}
+        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 10 }}>
+          {Array.from({ length: currentUser.pin.length }).map((_, i) => (
+            <div key={i} className={`pin-dot ${i < pin.length ? "filled" : ""}`} />
+          ))}
+        </div>
+        {error
+          ? <div style={{ textAlign: "center", fontSize: 13, color: t.bear, marginBottom: 14, minHeight: 20 }}>{error}</div>
+          : <div style={{ minHeight: 34, marginBottom: 0 }} />
+        }
+
+        {/* Numpad */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9 }}>
+          {["1","2","3","4","5","6","7","8","9","","0","del"].map((k, i) => (
+            <button key={i} onClick={() => k && handleKey(k)} style={{
+              height: 56,
+              borderRadius: 12,
+              border: `1.5px solid ${k ? t.border : "transparent"}`,
+              background: k ? t.surface2 : "transparent",
+              color: k === "del" ? t.bear : t.text,
+              fontSize: k === "del" ? 14 : 20,
+              fontWeight: 600,
+              cursor: k ? "pointer" : "default",
+              transition: "all 0.1s",
+              fontFamily: "'DM Sans', sans-serif",
+            }}>
+              {k === "del" ? "⌫" : k}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 16, fontSize: 11, color: t.text3 }}>
+          or type on keyboard
+        </div>
+      </div>
+
+      {/* Hidden user switcher — only appears after 3 taps on logo */}
+      {showSwitcher && (
+        <div className="modal-overlay" onClick={() => setShowSwitcher(false)}>
+          <div className="modal-box" style={{ maxWidth: 300 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: t.text2, marginBottom: 14 }}>Switch user</div>
             {USERS.map(u => (
-              <button key={u.name} className="card" style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                cursor: "pointer",
-                border: `1px solid ${t.border}`,
-                background: t.surface,
-                marginBottom: 8,
-                textAlign: "left",
-                borderRadius: 12,
-                padding: "14px 16px",
-              }} onClick={() => setSelectedUser(u.name)}>
+              <button key={u.name} onClick={() => {
+                setActiveUser(u.name);
+                setPin("");
+                setError("");
+                setShowSwitcher(false);
+              }} style={{
+                display: "flex", alignItems: "center", gap: 10,
+                width: "100%", padding: "11px 14px",
+                background: activeUser === u.name ? t.accentSoft : t.surface2,
+                border: `1.5px solid ${activeUser === u.name ? t.accent : t.border}`,
+                borderRadius: 10, marginBottom: 8,
+                cursor: "pointer", color: t.text, fontSize: 14, fontWeight: 600,
+              }}>
                 <div style={{
-                  width: 36, height: 36,
-                  borderRadius: "50%",
+                  width: 32, height: 32, borderRadius: "50%",
                   background: t.accentSoft,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontWeight: 700, color: t.accent, fontSize: 14, flexShrink: 0,
-                }}>
-                  {u.name[0].toUpperCase()}
-                </div>
-                <span style={{ fontSize: 15, fontWeight: 600, color: t.text }}>{u.name}</span>
+                  color: t.accent, fontWeight: 700, fontSize: 13, flexShrink: 0,
+                }}>{u.name[0].toUpperCase()}</div>
+                {u.name}
+                {activeUser === u.name && <span style={{ marginLeft: "auto", color: t.accent, fontSize: 12 }}>✓</span>}
               </button>
             ))}
           </div>
-        ) : (
-          <div>
-            <button className="btn-ghost" style={{ marginBottom: 20, fontSize: 13 }}
-              onClick={() => { setSelectedUser(null); setPin(""); setError(""); }}>
-              ← Back
-            </button>
-            <div style={{ textAlign: "center", marginBottom: 24 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: t.text }}>Enter PIN for</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: t.accent }}>{selectedUser}</div>
-            </div>
-            <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 8 }}>
-              {Array.from({ length: USERS.find(u => u.name === selectedUser).pin.length }).map((_, i) => (
-                <div key={i} className={`pin-dot ${i < pin.length ? "filled" : ""}`} />
-              ))}
-            </div>
-            {error && <div style={{ textAlign: "center", fontSize: 13, color: t.bear, marginBottom: 8 }}>{error}</div>}
-            <div className="sp16" />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-              {["1","2","3","4","5","6","7","8","9","","0","del"].map((k, i) => (
-                <button key={i} onClick={() => k && handleKey(k)} style={{
-                  height: 52,
-                  borderRadius: 10,
-                  border: `1.5px solid ${t.border}`,
-                  background: k ? t.surface2 : "transparent",
-                  color: k === "del" ? t.bear : t.text,
-                  fontSize: k === "del" ? 13 : 18,
-                  fontWeight: 600,
-                  cursor: k ? "pointer" : "default",
-                  transition: "all 0.1s",
-                }}>
-                  {k === "del" ? "⌫" : k}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1061,25 +1089,50 @@ function LogPage({ onSave, editData, onCancelEdit, toast }) {
           </>
         )}
 
-        {/* CRT Conflict — contextual */}
+        {/* CRT Conflict — contextual, auto-detects alignment */}
         <hr className="divider" />
         <div style={{ fontSize: 12, fontWeight: 700, color: t.text2, marginBottom: 10 }}>CRT vs Daily Draw</div>
         <div className="g2" style={{ marginBottom: 12 }}>
-          <Field label="CRT Candle Signal">
-            <Select value={form.crtSignal} onChange={v => set("crtSignal", v)}
-              options={[{value:"bull_sweep",label:"Bull (sweep low→up)"},{value:"bear_sweep",label:"Bear (sweep high→down)"},{value:"neutral",label:"Neutral"}]} />
+          <Field label="CRT Signal">
+            <ChipGroup
+              options={[{value:"bull",label:"Bullish"},{value:"bear",label:"Bearish"}]}
+              value={form.crtSignal}
+              onChange={v => {
+                const draw = form.dailyDraw;
+                const aligned = (v === "bull" && draw === "up") || (v === "bear" && draw === "down");
+                const conflict = (v && draw && draw !== "unclear") ? (aligned ? "aligned" : "conflict") : "";
+                set("crtSignal", v);
+                set("crtAligned", conflict);
+              }}
+              colorMap={{ bull:"bull", bear:"bear" }} />
           </Field>
-          <Field label="Daily Draw Direction">
-            <Select value={form.dailyDraw} onChange={v => set("dailyDraw", v)}
-              options={[{value:"up",label:"Up (high to take)"},{value:"down",label:"Down (low to take)"},{value:"unclear",label:"Unclear"}]} />
+          <Field label="Daily Draw">
+            <ChipGroup
+              options={[{value:"up",label:"Up"},{value:"down",label:"Down"},{value:"unclear",label:"Unclear"}]}
+              value={form.dailyDraw}
+              onChange={v => {
+                const sig = form.crtSignal;
+                const aligned = (sig === "bull" && v === "up") || (sig === "bear" && v === "down");
+                const conflict = (sig && v && v !== "unclear") ? (aligned ? "aligned" : "conflict") : "";
+                set("dailyDraw", v);
+                set("crtAligned", conflict);
+              }}
+              colorMap={{ up:"bull", down:"bear", unclear:"gold" }} />
           </Field>
         </div>
-        <Field label="Are They Aligned?">
-          <ChipGroup
-            options={[{value:"aligned",label:"✓ Aligned"},{value:"conflict",label:"⚠ Conflict"}]}
-            value={form.crtAligned} onChange={v => set("crtAligned", v)}
-            colorMap={{ aligned:"bull", conflict:"orange" }} />
-        </Field>
+        {/* Auto-detected alignment indicator */}
+        {form.crtAligned && (
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "5px 12px", borderRadius: 8, marginBottom: 12,
+            background: form.crtAligned === "aligned" ? "rgba(34,197,94,0.1)" : "rgba(249,115,22,0.1)",
+            border: `1px solid ${form.crtAligned === "aligned" ? t.bull : t.orange}`,
+            fontSize: 12, fontWeight: 700,
+            color: form.crtAligned === "aligned" ? t.bull : t.orange,
+          }}>
+            {form.crtAligned === "aligned" ? "✓ Aligned" : "⚠ Conflict detected"}
+          </div>
+        )}
         {form.crtAligned === "conflict" && (
           <div className="conflict-zone">
             <Field label="Which One Was Correct?">
@@ -1351,7 +1404,7 @@ function LogPage({ onSave, editData, onCancelEdit, toast }) {
       <div className="section-heading">Brother's Setup</div>
       <div className="brother-card">
         <div style={{ fontSize: 12, color: t.text3, marginBottom: 14 }}>
-          Tracked separately — no influence on your data
+          Tracked separately
         </div>
         <Field label="Setup Available Today?">
           <ChipGroup options={["Yes","No"]}
@@ -1766,7 +1819,7 @@ function AnalyticsPage({ sessions }) {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState(false);
   const t = isDark ? DARK : LIGHT;
 
   const [user, setUser] = useState(() => localStorage.getItem("bt_user") || null);
